@@ -1,6 +1,6 @@
 branch_protection:
   policies:
-    - target: default-branch
+    - target: main
       message: "Main protection. Pull request"
       rules:
         - prevent_non_pr_changes
