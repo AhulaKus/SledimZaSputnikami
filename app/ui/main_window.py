@@ -85,10 +85,17 @@ class MainWindow(QMainWindow):
 
         main_layout.addWidget(control_panel)
 
-        self.info_label = QLabel("Ожидание загрузки данных...")
-        self.info_label.setAlignment(Qt.AlignCenter)
-        self.info_label.setStyleSheet("font-size: 14px; font-weight: bold; color: #333; margin-top: 5px;")
-        main_layout.addWidget(self.info_label)
+        # --- 1) Строка про актуальность TLE (чтобы не перетиралась) ---
+        self.tle_label = QLabel("TLE: ожидание загрузки...")
+        self.tle_label.setAlignment(Qt.AlignCenter)
+        self.tle_label.setStyleSheet("font-size: 13px; font-weight: bold; color: #333; margin-top: 6px;")
+        main_layout.addWidget(self.tle_label)
+
+        # --- 2) Строка про выбранный спутник ---
+        self.sat_label = QLabel("Спутник: —")
+        self.sat_label.setAlignment(Qt.AlignCenter)
+        self.sat_label.setStyleSheet("font-size: 13px; font-weight: bold; color: #333; margin-top: 2px;")
+        main_layout.addWidget(self.sat_label)
 
         self.browser = QWebEngineView()
         main_layout.addWidget(self.browser)
@@ -98,7 +105,7 @@ class MainWindow(QMainWindow):
         if not category:
             return
 
-        self.info_label.setText(f"Загрузка данных: {category.name}...")
+        self.tle_label.setText(f"Загрузка данных: {category.name}...")
         QApplication.processEvents()
 
         try:
@@ -111,11 +118,11 @@ class MainWindow(QMainWindow):
                 dt = datetime.fromisoformat(meta.downloaded_at_iso)
                 age_sec = (datetime.now(dt.tzinfo) - dt).total_seconds()
                 age_min = int(age_sec // 60)
-                self.info_label.setText(
+                self.tle_label.setText(
                     f"TLE: {age_min} мин назад | источник: {meta.source_url} | спутников: {len(self._current_satellites)}"
                 )
             else:
-                self.info_label.setText(
+                self.tle_label.setText(
                     f"TLE: нет метаданных | спутников: {len(self._current_satellites)}"
                 )
 
@@ -132,8 +139,8 @@ class MainWindow(QMainWindow):
 
         except Exception as e:
             traceback.print_exc()
-            self.info_label.setText(f"Ошибка загрузки данных: {type(e).__name__}: {e}")
-            raise
+            self.tle_label.setText(f"Ошибка загрузки данных: {type(e).__name__}: {e}")
+            raise #
 
     def _update_map(self, sat_name: str) -> None:
         if not sat_name:
@@ -153,8 +160,8 @@ class MainWindow(QMainWindow):
             max_lat=self._cfg.max_lat,
         )
 
-        self.info_label.setText(
-            f"Спутник: {state.name}   |   Высота: {state.alt_km:,.0f} км   |   Радиус покрытия: {coverage.radius_km:,.0f} км"
+        self.sat_label.setText(
+            f"Спутник: {state.name} | Высота: {state.alt_km:,.0f} км | Радиус покрытия: {coverage.radius_km:,.0f} км"
         )
 
         temp_path = self._renderer.render(
