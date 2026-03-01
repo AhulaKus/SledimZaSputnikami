@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from typing import Dict
 
 from PyQt5.QtCore import QUrl, Qt
@@ -50,6 +52,7 @@ class MainWindow(QMainWindow):
         self._init_ui()
         self._load_category(self.combo_category.currentText())
 
+
     def _init_ui(self) -> None:
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -99,22 +102,38 @@ class MainWindow(QMainWindow):
         QApplication.processEvents()
 
         try:
+            #Load TLE (net or cache)
             self._current_satellites = self._tle_repo.load_category(category, reload=False)
 
+            #read meta
+            meta = self._tle_repo.read_meta(category)
+            if meta:
+                dt = datetime.fromisoformat(meta.downloaded_at_iso)
+                age_sec = (datetime.now(dt.tzinfo) - dt).total_seconds()
+                age_min = int(age_sec // 60)
+                self.info_label.setText(
+                    f"TLE: {age_min} мин назад | источник: {meta.source_url} | спутников: {len(self._current_satellites)}"
+                )
+            else:
+                self.info_label.setText(
+                    f"TLE: нет метаданных | спутников: {len(self._current_satellites)}"
+                )
 
+            #upd combbox
             self.combo_sat.blockSignals(True)
             self.combo_sat.clear()
             self.combo_sat.addItems(self._tle_repo.list_satellite_names(self._current_satellites))
             self.combo_sat.blockSignals(False)
 
+            #selection
             if self.combo_sat.count() > 0:
                 self.combo_sat.setCurrentIndex(0)
                 self._update_map(self.combo_sat.currentText())
 
-
         except Exception as e:
             traceback.print_exc()
             self.info_label.setText(f"Ошибка загрузки данных: {type(e).__name__}: {e}")
+            raise
 
     def _update_map(self, sat_name: str) -> None:
         if not sat_name:
