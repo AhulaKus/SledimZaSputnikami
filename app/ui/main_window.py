@@ -85,6 +85,10 @@ class MainWindow(QMainWindow):
 
         main_layout.addWidget(control_panel)
 
+        self.btn_retry = QPushButton("Обновить TLE")
+        self.btn_retry.clicked.connect(self._retry_load_current_category)
+        control_layout.addWidget(self.btn_retry)
+
         # --- 1) Строка про актуальность TLE (чтобы не перетиралась) ---
         self.tle_label = QLabel("TLE: ожидание загрузки...")
         self.tle_label.setAlignment(Qt.AlignCenter)
@@ -100,7 +104,7 @@ class MainWindow(QMainWindow):
         self.browser = QWebEngineView()
         main_layout.addWidget(self.browser)
 
-    def _load_category(self, category_name: str) -> None:
+    def _load_category(self, category_name: str, force_reload: bool = False) -> None:
         category = self._categories.get(category_name)
         if not category:
             return
@@ -110,7 +114,7 @@ class MainWindow(QMainWindow):
 
         try:
             #Load TLE (net or cache)
-            self._current_satellites = self._tle_repo.load_category(category, reload=False)
+            self._current_satellites = self._tle_repo.load_category(category, reload=force_reload)
 
             #read meta
             meta = self._tle_repo.read_meta(category)
@@ -141,6 +145,9 @@ class MainWindow(QMainWindow):
             traceback.print_exc()
             self.tle_label.setText(f"Ошибка загрузки данных: {type(e).__name__}: {e}")
             raise #
+
+    def _retry_load_current_category(self) -> None:
+        self._load_category(self.combo_category.currentText(), force_reload=True)
 
     def _update_map(self, sat_name: str) -> None:
         if not sat_name:
