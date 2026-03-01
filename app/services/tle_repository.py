@@ -44,6 +44,19 @@ class TleRepository:
         if reload or (not local_tle.exists()):
             self._download_to_file(category.url, local_tle, local_meta)
 
+        if local_tle.exists() and (not local_meta.exists()):
+            content = local_tle.read_bytes()
+            meta = TleMeta(
+                source_url=category.url,
+                downloaded_at_iso=self._now_iso_local(),  # время генерации меты
+                http_status=0,  # 0 = не из сети
+                etag=None,
+                last_modified=None,
+                sha256=self._sha256_bytes(content),
+                bytes=len(content),
+            )
+            local_meta.write_text(json.dumps(meta.__dict__, ensure_ascii=False, indent=2), encoding="utf-8")
+
         sats = load.tle_file(str(local_tle), reload=False)
         satellites = {sat.name: sat for sat in sats}
         self._cache[category.name] = satellites
