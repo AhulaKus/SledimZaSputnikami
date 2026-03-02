@@ -121,17 +121,21 @@ class MainWindow(QMainWindow):
             self._current_satellites = self._tle_repo.load_category(category, reload=force_reload)
             meta = self._tle_repo.read_meta(category) #read meta
 
-            scr = "ONLINE" if getattr(self._tle_repo, "last_source", "") == "network" else "OFFLINE (cache)"
+            # статус online/offline + причина
+            scr = "ONLINE" if self._tle_repo.last_source == "network" else "OFFLINE (cache)"
+            extra = f" | update error: {self._tle_repo.last_error}" if self._tle_repo.last_error else ""
+
             if meta:
                 dt = datetime.fromisoformat(meta.downloaded_at_iso)
                 age_sec = (datetime.now(dt.tzinfo) - dt).total_seconds()
                 age_min = int(age_sec // 60)
+
                 self.tle_label.setText(
-                    f"{scr} | TLE: {age_min} мин назад | источник: {meta.source_url} | спутников: {len(self._current_satellites)}"
+                    f"{scr} | TLE: {age_min} мин назад | источник: {meta.source_url} | спутников: {len(self._current_satellites)}{extra}"
                 )
             else:
                 self.tle_label.setText(
-                    f"{scr} | TLE: нет метаданных | спутников: {len(self._current_satellites)}"
+                    f"{scr} | TLE: нет метаданных | спутников: {len(self._current_satellites)}{extra}"
                 )
 
             #upd combbox
@@ -210,4 +214,4 @@ class MainWindow(QMainWindow):
             self.browser.load(QUrl.fromLocalFile(temp_path))
 
         except Exception as e:
-            self.set_label.setText(f"Ошибка расчетов/карты: {type(e).__name__}: {e}")
+            self.sat_label.setText(f"Ошибка расчетов/карты: {type(e).__name__}: {e}")
