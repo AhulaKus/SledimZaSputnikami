@@ -25,6 +25,8 @@ from app.services.tle_repository import TleCategory, TleRepository
 from app.services.satellite_tracker import SatelliteTracker
 from app.geo.coverage import build_coverage_polygons
 
+from pathlib import Path
+
 
 class MainWindow(QMainWindow):
     def __init__(self, cfg: AppConfig) -> None:
@@ -104,6 +106,8 @@ class MainWindow(QMainWindow):
         self.browser = QWebEngineView()
         main_layout.addWidget(self.browser)
 
+        self.last_source = "unknown" #online/offline
+
     def _load_category(self, category_name: str, force_reload: bool = False) -> None:
         category = self._categories.get(category_name)
         if not category:
@@ -115,19 +119,19 @@ class MainWindow(QMainWindow):
         try:
             #Load TLE (net or cache)
             self._current_satellites = self._tle_repo.load_category(category, reload=force_reload)
+            meta = self._tle_repo.read_meta(category) #read meta
 
-            #read meta
-            meta = self._tle_repo.read_meta(category)
+            scr = "ONLINE" if getattr(self._tle_repo, "last_source", "") == "network" else "OFFLINE (cache)"
             if meta:
                 dt = datetime.fromisoformat(meta.downloaded_at_iso)
                 age_sec = (datetime.now(dt.tzinfo) - dt).total_seconds()
                 age_min = int(age_sec // 60)
                 self.tle_label.setText(
-                    f"TLE: {age_min} мин назад | источник: {meta.source_url} | спутников: {len(self._current_satellites)}"
+                    f"{scr} | TLE: {age_min} мин назад | источник: {meta.source_url} | спутников: {len(self._current_satellites)}"
                 )
             else:
                 self.tle_label.setText(
-                    f"TLE: нет метаданных | спутников: {len(self._current_satellites)}"
+                    f"{scr} | TLE: нет метаданных | спутников: {len(self._current_satellites)}"
                 )
 
             #upd combbox
@@ -136,45 +140,74 @@ class MainWindow(QMainWindow):
             self.combo_sat.addItems(self._tle_repo.list_satellite_names(self._current_satellites))
             self.combo_sat.blockSignals(False)
 
-            #selection
-            if self.combo_sat.count() > 0:
-                self.combo_sat.setCurrentIndex(0)
-                self._update_map(self.combo_sat.currentText())
+            #selection at start (default)
+            self.combo_sat.setCurrentIndex(-1)
+            self.sat_label.setText("Выбери сначала епт")
+            self._show_placeholder_map()
 
         except Exception as e:
             traceback.print_exc()
             self.tle_label.setText(f"Ошибка загрузки данных: {type(e).__name__}: {e}")
             raise #
 
+    def _show_placeholder_map(self) -> None:
+        from PyQt5.QtCore import QUrl
+        import os
+
+        mode = getattr(self._cfg, "placeholder_mode", "folium")
+
+        if mode == "static":
+            base_dir = Path(__file__).resolve().parents[2]  # корень проекта (там где папка assets)
+            path = base_dir / self._cfg.placeholder_html  # assets/defaultBG.html
+            #print("STATIC PLACEHOLDER:", path, "exists:", path.exists()) #отладка
+            self.browser.load(QUrl.fromLocalFile(str(path)))
+            return
+
+        # режим по-старому: folium генерит временный html
+        import folium
+        m = folium.Map(location=[0, 0], zoom_start=2, tiles="CartoDB positron", min_zoom=2)
+        folium.Marker(location=[0, 0], popup="Выберите категорию и спутник").add_to(m)
+
+        path = os.path.abspath(self._cfg.placeholder_temp)
+        m.save(path)
+        self.browser.load(QUrl.fromLocalFile(path))
+
     def _retry_load_current_category(self) -> None:
         self._load_category(self.combo_category.currentText(), force_reload=True)
 
     def _update_map(self, sat_name: str) -> None:
         if not sat_name:
+            self.sat_label.setText("Выбери сначала епт")
             return
+
         satellite = self._current_satellites.get(sat_name)
         if satellite is None:
+            self.sat_label.setText("Спутник не найден в текущей категории")
             return
 
-        state = self._tracker.get_state_now(satellite=satellite, name=sat_name)
+        try:
+            state = self._tracker.get_state_now(satellite=satellite, name=sat_name)
 
-        coverage = build_coverage_polygons(
-            lat=state.lat_deg,
-            lon=state.lon_deg,
-            alt_km=state.alt_km,
-            earth_radius_km=self._cfg.earth_radius_km,
-            min_lat=self._cfg.min_lat,
-            max_lat=self._cfg.max_lat,
-        )
+            coverage = build_coverage_polygons(
+                lat=state.lat_deg,
+                lon=state.lon_deg,
+                alt_km=state.alt_km,
+                earth_radius_km=self._cfg.earth_radius_km,
+                min_lat=self._cfg.min_lat,
+                max_lat=self._cfg.max_lat,
+            )
 
-        self.sat_label.setText(
-            f"Спутник: {state.name} | Высота: {state.alt_km:,.0f} км | Радиус покрытия: {coverage.radius_km:,.0f} км"
-        )
+            self.sat_label.setText(
+                f"Спутник: {state.name} | Высота: {state.alt_km:,.0f} км | Радиус покрытия: {coverage.radius_km:,.0f} км"
+            )
 
-        temp_path = self._renderer.render(
-            lat=state.lat_deg,
-            lon=state.lon_deg,
-            sat_name=state.name,
-            polygons=coverage.polygons,
-        )
-        self.browser.load(QUrl.fromLocalFile(temp_path))
+            temp_path = self._renderer.render(
+                lat=state.lat_deg,
+                lon=state.lon_deg,
+                sat_name=state.name,
+                polygons=coverage.polygons,
+            )
+            self.browser.load(QUrl.fromLocalFile(temp_path))
+
+        except Exception as e:
+            self.set_label.setText(f"Ошибка расчетов/карты: {type(e).__name__}: {e}")
