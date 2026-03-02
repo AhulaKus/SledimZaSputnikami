@@ -18,13 +18,17 @@ class AppConfig:
     # Радиус Земли
     earth_radius_km: float = 6371.0
 
+    placeholder_mode: str = "static"  # "static" или "folium"
+    placeholder_html: str = "assets/defaultBG.html"
+    placeholder_temp: str = "temp_map_placeholder.html"
+
 
 TLE_CATEGORIES = {
     "GPS (Навигация)": "https://celestrak.org/NORAD/elements/gps-ops.txt",
     "Космические станции (МКС)": "https://celestrak.org/NORAD/elements/stations.txt",
     "Метеоспутники (Weather)": "https://celestrak.org/NORAD/elements/weather.txt",
     "ГЛОНАСС (Навигация)": "https://celestrak.org/NORAD/elements/glo-ops.txt",
-    "Спутники связи (Molniya)": "https://celestrak.org/NORAD/elements/molniya.txt",
+    "Спутники связи (Molniya)": "https://celestrak.org/NORAD/elements/molniya.txt", #отваливается
     "Геостационарные (ТВ)": "https://celestrak.org/NORAD/elements/geo.txt",
-    "Starlink": "https://celestrak.org/NORAD/elements/starlink.txt",
+    "Starlink": "https://celestrak.org/NORAD/elements/starlink.txt", #отваливается
 }
