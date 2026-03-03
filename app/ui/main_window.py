@@ -4,7 +4,7 @@ from datetime import datetime
 
 from typing import Dict
 
-from PyQt5.QtCore import QUrl, Qt
+from PyQt5.QtCore import QUrl, Qt, QTimer
 from PyQt5.QtWidgets import (
     QComboBox,
     QLabel,
@@ -54,6 +54,32 @@ class MainWindow(QMainWindow):
         self._init_ui()
         self._load_category(self.combo_category.currentText())
 
+        self._timer = QTimer(self)
+        self._timer.setInterval(2000)  # 2 секунды, можно поменять
+        self._timer.timeout.connect(self._tick)
+
+        self._selected_sat_name: str | None = None
+
+    def _start_tracking(self) -> None:
+        if not self._selected_sat_name:
+            self.sat_label.setText("Сначала выберите спутник")
+            return
+        self._timer.start()
+        self.btn_start.setEnabled(False)
+        self.btn_stop.setEnabled(True)
+
+    def _stop_tracking(self) -> None:
+        self._timer.stop()
+        self.btn_start.setEnabled(True)
+        self.btn_stop.setEnabled(False)
+
+    def _tick(self) -> None:
+        # если спутник не выбран — ничего не делаем
+        if not self._selected_sat_name:
+            return
+        # обновляем ту же самую карту
+        self._update_map(self._selected_sat_name)
+
 
     def _init_ui(self) -> None:
         central_widget = QWidget()
@@ -90,6 +116,15 @@ class MainWindow(QMainWindow):
         self.btn_retry = QPushButton("Обновить TLE")
         self.btn_retry.clicked.connect(self._retry_load_current_category)
         control_layout.addWidget(self.btn_retry)
+
+        self.btn_start = QPushButton("Старт")
+        self.btn_start.clicked.connect(self._start_tracking)
+        control_layout.addWidget(self.btn_start)
+
+        self.btn_stop = QPushButton("Стоп")
+        self.btn_stop.clicked.connect(self._stop_tracking)
+        self.btn_stop.setEnabled(False)
+        control_layout.addWidget(self.btn_stop)
 
         # --- 1) Строка про актуальность TLE (чтобы не перетиралась) ---
         self.tle_label = QLabel("TLE: ожидание загрузки...")
@@ -184,6 +219,7 @@ class MainWindow(QMainWindow):
         self._load_category(self.combo_category.currentText(), force_reload=True)
 
     def _update_map(self, sat_name: str) -> None:
+        self._selected_sat_name = sat_name if sat_name else None
         if not sat_name:
             self.sat_label.setText("Выбери сначала епт")
             return
@@ -207,6 +243,8 @@ class MainWindow(QMainWindow):
 
             self.sat_label.setText(
                 f"Спутник: {state.name} | Высота: {state.alt_km:,.0f} км | Радиус покрытия: {coverage.radius_km:,.0f} км"
+                f"\n lat={state.lat_deg:.3f} lon={state.lon_deg:.3f} | alt={state.alt_km:,.0f} км"
+
             )
 
             temp_path = self._renderer.render(
