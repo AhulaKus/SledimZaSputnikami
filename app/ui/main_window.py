@@ -106,7 +106,6 @@ class MainWindow(QMainWindow):
         self.browser = QWebEngineView()
         main_layout.addWidget(self.browser)
 
-        self.last_source = "unknown" #online/offline
 
     def _load_category(self, category_name: str, force_reload: bool = False) -> None:
         category = self._categories.get(category_name)
@@ -150,9 +149,14 @@ class MainWindow(QMainWindow):
             self._show_placeholder_map()
 
         except Exception as e:
-            traceback.print_exc()
-            self.tle_label.setText(f"Ошибка загрузки данных: {type(e).__name__}: {e}")
-            raise #
+            traceback.print_exc()  # лог в консоль PyCharm
+            self.tle_label.setText(f"Ошибка загрузки TLE: {type(e).__name__}: {e}")
+            self.sat_label.setText("Выберите другую категорию или нажмите 'Обновить TLE'")
+            self.combo_sat.blockSignals(True)
+            self.combo_sat.clear()
+            self.combo_sat.blockSignals(False)
+            self._show_placeholder_map()
+            return
 
     def _show_placeholder_map(self) -> None:
         from PyQt5.QtCore import QUrl
@@ -214,4 +218,6 @@ class MainWindow(QMainWindow):
             self.browser.load(QUrl.fromLocalFile(temp_path))
 
         except Exception as e:
-            self.sat_label.setText(f"Ошибка расчетов/карты: {type(e).__name__}: {e}")
+            self.sat_label.setText(
+                f"Ошибка расчёта/карты: {type(e).__name__}: {e}. Попробуйте другой спутник."
+            )
