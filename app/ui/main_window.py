@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from typing import Dict
+from typing import Dict, List, Tuple
+
+import time
 
 from PyQt5.QtCore import QUrl, Qt, QTimer
 from PyQt5.QtWidgets import (
@@ -58,7 +60,11 @@ class MainWindow(QMainWindow):
         self._timer.setInterval(2000)  # 2 секунды, можно поменять
         self._timer.timeout.connect(self._tick)
 
+        self._track_segments = None
+        self._track_last_update_ts = 0.0
+
         self._selected_sat_name: str | None = None
+        self._track_sat_name: str | None = None
 
     def _start_tracking(self) -> None:
         if not self._selected_sat_name:
@@ -126,13 +132,11 @@ class MainWindow(QMainWindow):
         self.btn_stop.setEnabled(False)
         control_layout.addWidget(self.btn_stop)
 
-        # --- 1) Строка про актуальность TLE (чтобы не перетиралась) ---
         self.tle_label = QLabel("TLE: ожидание загрузки...")
         self.tle_label.setAlignment(Qt.AlignCenter)
         self.tle_label.setStyleSheet("font-size: 13px; font-weight: bold; color: #333; margin-top: 6px;")
         main_layout.addWidget(self.tle_label)
 
-        # --- 2) Строка про выбранный спутник ---
         self.sat_label = QLabel("Спутник: —")
         self.sat_label.setAlignment(Qt.AlignCenter)
         self.sat_label.setStyleSheet("font-size: 13px; font-weight: bold; color: #333; margin-top: 2px;")
@@ -219,15 +223,22 @@ class MainWindow(QMainWindow):
         self._load_category(self.combo_category.currentText(), force_reload=True)
 
     def _update_map(self, sat_name: str) -> None:
-        self._selected_sat_name = sat_name if sat_name else None
         if not sat_name:
             self.sat_label.setText("Выбери сначала епт")
             return
+
+        self._selected_sat_name = sat_name if sat_name else None
 
         satellite = self._current_satellites.get(sat_name)
         if satellite is None:
             self.sat_label.setText("Спутник не найден в текущей категории")
             return
+
+        # если спутник сменился — сбросить трек, чтобы пересчитать для нового
+        if self._track_sat_name != sat_name:
+            self._track_sat_name = sat_name
+            self._track_segments = None
+            self._track_last_update_ts = 0.0
 
         try:
             state = self._tracker.get_state_now(satellite=satellite, name=sat_name)
@@ -243,15 +254,29 @@ class MainWindow(QMainWindow):
 
             self.sat_label.setText(
                 f"Спутник: {state.name} | Высота: {state.alt_km:,.0f} км | Радиус покрытия: {coverage.radius_km:,.0f} км"
-                f"\n lat={state.lat_deg:.3f} lon={state.lon_deg:.3f} | alt={state.alt_km:,.0f} км"
+                f"\n lat={state.lat_deg:.3f} lon={state.lon_deg:.3f}"
 
             )
+
+            now_ts = time.time()
+            need_track = (self._track_segments is None) or (now_ts - self._track_last_update_ts >= 60)
+
+            if need_track:
+                points = self._tracker.get_ground_track(
+                    satellite=satellite,
+                    minutes_back=60,
+                    minutes_forward=60,
+                    step_sec=20,
+                )
+                self._track_segments = self._split_track_by_dateline(points)
+                self._track_last_update_ts = now_ts
 
             temp_path = self._renderer.render(
                 lat=state.lat_deg,
                 lon=state.lon_deg,
                 sat_name=state.name,
                 polygons=coverage.polygons,
+                track_segments=self._track_segments,
             )
             self.browser.load(QUrl.fromLocalFile(temp_path))
 
@@ -259,3 +284,19 @@ class MainWindow(QMainWindow):
             self.sat_label.setText(
                 f"Ошибка расчёта/карты: {type(e).__name__}: {e}. Попробуйте другой спутник."
             )
+    @staticmethod
+    def _split_track_by_dateline(points: List[Tuple[float, float]]) -> List[List[Tuple[float, float]]]:
+        if not points:
+            return []
+
+        segments: List[List[Tuple[float, float]]] = [[points[0]]]
+        prev_lon = points[0][1]
+
+        for lat, lon in points[1:]:
+            if abs(lon - prev_lon) > 180:
+                segments.append([])
+            segments[-1].append((lat, lon))
+            prev_lon = lon
+
+        # выкинуть пустые
+        return [seg for seg in segments if len(seg) >= 2]
