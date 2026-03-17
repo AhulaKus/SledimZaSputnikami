@@ -60,7 +60,8 @@ class MainWindow(QMainWindow):
         self._timer.setInterval(2000)  # 2 секунды, можно поменять
         self._timer.timeout.connect(self._tick)
 
-        self._track_segments = None
+        self._past_track_segments = None
+        self._future_track_segments = None
         self._track_last_update_ts = 0.0
 
         self._selected_sat_name: str | None = None
@@ -237,7 +238,8 @@ class MainWindow(QMainWindow):
         # если спутник сменился — сбросить трек, чтобы пересчитать для нового
         if self._track_sat_name != sat_name:
             self._track_sat_name = sat_name
-            self._track_segments = None
+            self._past_track_segments = None
+            self._future_track_segments = None
             self._track_last_update_ts = 0.0
 
         try:
@@ -259,7 +261,11 @@ class MainWindow(QMainWindow):
             )
 
             now_ts = time.time()
-            need_track = (self._track_segments is None) or (now_ts - self._track_last_update_ts >= 60)
+            need_track = (
+                    self._past_track_segments is None
+                    or self._future_track_segments is None
+                    or (now_ts - self._track_last_update_ts >= 60)
+            )
 
             if need_track:
                 if state.alt_km > 30000:
@@ -271,24 +277,24 @@ class MainWindow(QMainWindow):
                     minutes_forward = 60
                     step_sec = 60
 
-                points = self._tracker.get_ground_track(
+                past_points, future_points = self._tracker.get_ground_track(
                     satellite=satellite,
                     minutes_back=minutes_back,
                     minutes_forward=minutes_forward,
                     step_sec=step_sec,
                 )
 
-                self._track_segments = self._split_track_by_dateline(points)
+                self._past_track_segments = self._split_track_by_dateline(past_points)
+                self._future_track_segments = self._split_track_by_dateline(future_points)
                 self._track_last_update_ts = now_ts
-
-            print("TRACK pts:", len(points), "segments:", [len(s) for s in self._track_segments])
 
             temp_path = self._renderer.render(
                 lat=state.lat_deg,
                 lon=state.lon_deg,
                 sat_name=state.name,
                 polygons=coverage.polygons,
-                track_segments=self._track_segments,
+                past_track_segments=self._past_track_segments,
+                future_track_segments=self._future_track_segments,
             )
             self.browser.load(QUrl.fromLocalFile(temp_path))
 
