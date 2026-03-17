@@ -37,30 +37,41 @@ class SatelliteTracker:
         )
 
     def get_ground_track(
-        self,
-        satellite: EarthSatellite,
-        minutes_back: int = 60,
-        minutes_forward: int = 60,
-        step_sec: int = 60,
-    ) -> List[Tuple[float, float]]:
+            self,
+            satellite: EarthSatellite,
+            minutes_back: int = 60,
+            minutes_forward: int = 60,
+            step_sec: int = 60,
+    ) -> tuple[List[Tuple[float, float]], List[Tuple[float, float]]]:
         """
-        Возвращает список (lat, lon) для трека: прошлое + будущее.
+        Возвращает два списка точек:
+        - прошлый трек
+        - будущий трек
         """
         now = datetime.now().astimezone()
 
-        start = now - timedelta(minutes=minutes_back)
-        end = now + timedelta(minutes=minutes_forward)
+        past_start = now - timedelta(minutes=minutes_back)
+        future_end = now + timedelta(minutes=minutes_forward)
 
-        total_sec = int((end - start).total_seconds())
-        steps = max(1, total_sec // step_sec)
+        past_total_sec = int((now - past_start).total_seconds())
+        future_total_sec = int((future_end - now).total_seconds())
 
-        times = [start + timedelta(seconds=i * step_sec) for i in range(steps + 1)]
-        t = self._ts.from_datetimes(times)
+        past_steps = max(1, past_total_sec // step_sec)
+        future_steps = max(1, future_total_sec // step_sec)
 
-        geocentric = satellite.at(t)
-        subpoints = geocentric.subpoint()
+        past_times = [past_start + timedelta(seconds=i * step_sec) for i in range(past_steps + 1)]
+        future_times = [now + timedelta(seconds=i * step_sec) for i in range(future_steps + 1)]
 
-        lats = subpoints.latitude.degrees
-        lons = subpoints.longitude.degrees
+        t_past = self._ts.from_datetimes(past_times)
+        t_future = self._ts.from_datetimes(future_times)
 
-        return list(zip(lats, lons))
+        past_geocentric = satellite.at(t_past)
+        future_geocentric = satellite.at(t_future)
+
+        past_subpoints = past_geocentric.subpoint()
+        future_subpoints = future_geocentric.subpoint()
+
+        past_points = list(zip(past_subpoints.latitude.degrees, past_subpoints.longitude.degrees))
+        future_points = list(zip(future_subpoints.latitude.degrees, future_subpoints.longitude.degrees))
+
+        return past_points, future_points
