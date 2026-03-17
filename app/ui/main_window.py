@@ -262,14 +262,26 @@ class MainWindow(QMainWindow):
             need_track = (self._track_segments is None) or (now_ts - self._track_last_update_ts >= 60)
 
             if need_track:
+                if state.alt_km > 30000:
+                    minutes_back = 720
+                    minutes_forward = 720
+                    step_sec = 120
+                else:
+                    minutes_back = 60
+                    minutes_forward = 60
+                    step_sec = 60
+
                 points = self._tracker.get_ground_track(
                     satellite=satellite,
-                    minutes_back=60,
-                    minutes_forward=60,
-                    step_sec=20,
+                    minutes_back=minutes_back,
+                    minutes_forward=minutes_forward,
+                    step_sec=step_sec,
                 )
+
                 self._track_segments = self._split_track_by_dateline(points)
                 self._track_last_update_ts = now_ts
+
+            print("TRACK pts:", len(points), "segments:", [len(s) for s in self._track_segments])
 
             temp_path = self._renderer.render(
                 lat=state.lat_deg,
@@ -284,19 +296,27 @@ class MainWindow(QMainWindow):
             self.sat_label.setText(
                 f"Ошибка расчёта/карты: {type(e).__name__}: {e}. Попробуйте другой спутник."
             )
+
     @staticmethod
     def _split_track_by_dateline(points: List[Tuple[float, float]]) -> List[List[Tuple[float, float]]]:
         if not points:
             return []
 
-        segments: List[List[Tuple[float, float]]] = [[points[0]]]
+        segments = [[points[0]]]
         prev_lon = points[0][1]
 
         for lat, lon in points[1:]:
+            diff = lon - prev_lon
+
+            if diff > 180:
+                lon -= 360
+            elif diff < -180:
+                lon += 360
+
             if abs(lon - prev_lon) > 180:
                 segments.append([])
+
             segments[-1].append((lat, lon))
             prev_lon = lon
 
-        # выкинуть пустые
-        return [seg for seg in segments if len(seg) >= 2]
+        return [s for s in segments if len(s) > 1]
