@@ -60,5 +60,13 @@ class FoliumMapRenderer:
                 ).add_to(m)
 
         temp_path = os.path.abspath(self._cfg.temp_file)
+        if track_segments:
+            for seg in track_segments:
+                folium.PolyLine(
+                    locations=[[lat, lon] for (lat, lon) in seg],
+                    weight=2,
+                    opacity=0.8,
+                ).add_to(m)
+        print("RENDER track:", 0 if not track_segments else sum(len(s) for s in track_segments))
         m.save(temp_path)
         return temp_path
